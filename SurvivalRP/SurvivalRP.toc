@@ -1,0 +1,25 @@
+## Interface: 100207
+## Title: SurvivalRP
+## Notes: Immersive survival mechanics for roleplay
+## Author: Ridrith
+## Version: 1.0.0
+## SavedVariables: SurvivalRPData, SurvivalRPSettings
+## DefaultState: enabled
+
+# Main addon file (must be first)
+SurvivalRP.lua
+
+# Core files
+Core\SurvivalMechanics.lua
+Core\FoodSystem.lua
+Core\Temperature.lua
+
+# UI files
+UI\SurvivalUI.lua
+UI\VisualEffects.lua
+
+# Configuration
+Config\Settings.lua
+
+# Data management
+Data\SaveData.lua
