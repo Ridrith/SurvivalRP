@@ -54,14 +54,22 @@ function SurvivalRP:RegisterAddonComm()
     end)
 end
 
+-- Fixed addon message handling to prevent duplicates
 function SurvivalRP:OnAddonMessage(message, channel, sender)
-    -- Don't process our own messages
-    if sender == UnitName("player") then
+    local playerName = UnitName("player")
+    local playerNameWithRealm = UnitName("player") .. "-" .. GetRealmName():gsub("%s+", "")
+    
+    -- Handle both cases: sender might be "Name" or "Name-Realm"
+    local senderBase = sender:match("^([^-]+)") or sender -- Get name part before the dash
+    
+    -- Don't process our own messages to prevent duplicates
+    if sender == playerName or sender == playerNameWithRealm or senderBase == playerName then
         return
     end
     
     local data = self:DeserializeData(message)
     if data and data.type and data.player and data.message then
+        -- Only display messages from other players
         self:DisplayAddonMessage(data)
     end
 end

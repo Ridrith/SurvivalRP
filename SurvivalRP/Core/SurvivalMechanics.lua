@@ -73,10 +73,8 @@ end
 function SurvivalRP:HandleConsumption(itemType, restoreAmount)
     if itemType == "food" then
         self.playerData.hunger = math.min(100, self.playerData.hunger + restoreAmount)
-        self:ShowMessage("You feel less hungry.", "SYSTEM")
     elseif itemType == "drink" then
         self.playerData.thirst = math.min(100, self.playerData.thirst + restoreAmount)
-        self:ShowMessage("You feel refreshed.", "SYSTEM")
     end
 end
 
@@ -145,8 +143,8 @@ function SurvivalRP:SendAddonMessage(messageType, message)
         C_ChatInfo.SendAddonMessage("SurvivalRP", serializedData, "GUILD")
     end
     
-    -- Also display locally
-    self:DisplayAddonMessage(data)
+    -- Display locally immediately
+    self:DisplayLocalMessage(data)
 end
 
 function SurvivalRP:SerializeData(data)
@@ -169,7 +167,22 @@ function SurvivalRP:DeserializeData(serializedData)
     return data
 end
 
+-- This displays messages from OTHER players only (received via addon communication)
 function SurvivalRP:DisplayAddonMessage(data)
+    local coloredName = "|cff00ff00" .. data.player .. "|r"
+    local message = "[SurvivalRP] " .. coloredName .. " " .. data.message
+    
+    -- Display in a separate chat frame or default chat
+    if self.config.useSeperateChannel then
+        -- You could create a separate chat tab for SurvivalRP messages
+        print(message)
+    else
+        print(message)
+    end
+end
+
+-- This displays the local player's own messages (called once immediately)
+function SurvivalRP:DisplayLocalMessage(data)
     local coloredName = "|cff00ff00" .. data.player .. "|r"
     local message = "[SurvivalRP] " .. coloredName .. " " .. data.message
     
