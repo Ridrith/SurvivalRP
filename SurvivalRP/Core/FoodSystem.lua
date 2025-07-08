@@ -190,7 +190,9 @@ SurvivalRP.currentConsumption = {
     itemId = nil,
     itemType = nil,
     startTime = nil,
-    spellId = nil
+    spellId = nil,
+    lastConsumptionTime = 0,
+    consumptionCooldown = 2 -- seconds between consumptions
 }
 
 -- WoW API compatibility functions
@@ -263,6 +265,15 @@ end
 
 -- Enhanced spell detection function
 function SurvivalRP:HandleSpellcast(spellId)
+    -- Cooldown check to prevent spam
+    local currentTime = GetTime()
+    if currentTime - (self.currentConsumption.lastConsumptionTime or 0) < (self.currentConsumption.consumptionCooldown or 2) then
+        if self.debugMode then
+            self:DebugPrint("Consumption on cooldown, ignoring spell: " .. spellId)
+        end
+        return
+    end
+    
     -- Check if this is a known eating spell
     local isEating = false
     local isDrinking = false
@@ -313,7 +324,8 @@ function SurvivalRP:HandleSpellcast(spellId)
     if isEating or isDrinking then
         self.currentConsumption.spellId = spellId
         self.currentConsumption.itemType = isEating and "food" or "drink"
-        self.currentConsumption.startTime = GetTime()
+        self.currentConsumption.startTime = currentTime
+        self.currentConsumption.lastConsumptionTime = currentTime
         
         if self.debugMode then
             local spellName = GetSpellInfo(spellId) or "Unknown"
