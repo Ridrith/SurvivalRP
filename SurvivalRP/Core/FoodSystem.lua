@@ -77,7 +77,7 @@ SurvivalRP.foodDatabase = {
     -- Alcoholic beverages (3-15 restore)
     [2723] = {type = "drink", restore = 3, name = "Mead Basted Caribou", special = "alcohol"},
     [1177] = {type = "drink", restore = 4, name = "Oil of Olaf", special = "alcohol"},
-    [2136] = {type = "drink", restore = 5, name = "Alcoholic Beverage", special = "alcohol"},
+    [2137] = {type = "drink", restore = 5, name = "Alcoholic Wine", special = "alcohol"},
     [1942] = {type = "drink", restore = 4, name = "Bottle of Moonshine", special = "alcohol"},
     [2593] = {type = "drink", restore = 6, name = "Flask of Port", special = "alcohol"},
     [2594] = {type = "drink", restore = 7, name = "Flagon of Mead", special = "alcohol"},
