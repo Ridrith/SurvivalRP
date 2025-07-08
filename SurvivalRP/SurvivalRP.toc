@@ -13,6 +13,8 @@ SurvivalRP.lua
 Core\SurvivalMechanics.lua
 Core\FoodSystem.lua
 Core\Temperature.lua
+Core\SleepSystem.lua
+Core\Weather.lua
 
 # UI files
 UI\SurvivalUI.lua

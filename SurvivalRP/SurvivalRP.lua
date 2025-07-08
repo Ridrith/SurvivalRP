@@ -249,10 +249,26 @@ function SlashCmdList.SURVIVALRP(msg)
         print("  /srp test - Test visual effects")
         print("  /rest - Begin resting")
         print("  /rest stop - Stop resting")
+        print("  /sleep - Begin sleeping")
+        print("  /sleep stop - Stop sleeping")
+        print("  /sleep status - Show sleep information")
+        print("  /weather - Show current weather status")
     else
+        -- Enhanced stats display with sleep and weather info
+        local sleepInfo = ""
+        if SurvivalRP.playerData.sleepData then
+            sleepInfo = string.format(" | Sleep Debt: %.1fh", SurvivalRP.playerData.sleepData.sleepDebt)
+        end
+        
+        local tempInfo = ""
+        if SurvivalRP.playerData.temperature then
+            local tempStatus = SurvivalRP:GetTemperatureStatus()
+            tempInfo = string.format(" | Temp: %s (%.0f°F)", tempStatus, SurvivalRP.playerData.temperature)
+        end
+        
         SurvivalRP:ShowMessage("Current stats - Hunger: " .. math.floor(SurvivalRP.playerData.hunger) .. 
                               "%, Thirst: " .. math.floor(SurvivalRP.playerData.thirst) .. 
-                              "%, Fatigue: " .. math.floor(SurvivalRP.playerData.fatigue) .. "%", "SYSTEM")
+                              "%, Fatigue: " .. math.floor(SurvivalRP.playerData.fatigue) .. "%" .. sleepInfo .. tempInfo, "SYSTEM")
     end
 end
 
@@ -264,6 +280,101 @@ function SlashCmdList.REST(msg)
         SurvivalRP:StopResting()
     else
         SurvivalRP:StartResting()
+    end
+end
+
+-- Sleep system commands
+SLASH_SLEEP1 = "/sleep"
+function SlashCmdList.SLEEP(msg)
+    local command = string.lower(msg or "")
+    
+    if command == "stop" or command == "wake" then
+        if SurvivalRP.HandleSleepCommand then
+            SurvivalRP:HandleSleepCommand("stop")
+        else
+            SurvivalRP:ShowMessage("Sleep system not loaded yet. Try /reload.", "WARNING")
+        end
+    elseif command == "status" or command == "info" then
+        if SurvivalRP.HandleSleepCommand then
+            SurvivalRP:HandleSleepCommand("status")
+        else
+            SurvivalRP:ShowMessage("Sleep system not loaded yet. Try /reload.", "WARNING")
+        end
+    elseif command == "help" then
+        SurvivalRP:ShowMessage("Sleep Commands:", "SYSTEM")
+        print("  /sleep - Begin sleeping")
+        print("  /sleep stop - Stop sleeping")
+        print("  /sleep wake - Stop sleeping")
+        print("  /sleep status - Show sleep information")
+    else
+        if SurvivalRP.HandleSleepCommand then
+            SurvivalRP:HandleSleepCommand("")
+        else
+            SurvivalRP:ShowMessage("Sleep system not loaded yet. Try /reload.", "WARNING")
+        end
+    end
+end
+
+-- Weather system commands
+SLASH_WEATHER1 = "/weather"
+SLASH_WEATHER2 = "/srp_weather"
+function SlashCmdList.WEATHER(msg)
+    local command = string.lower(msg or "")
+    
+    if command == "help" then
+        SurvivalRP:ShowMessage("Weather Commands:", "SYSTEM")
+        print("  /weather - Show current weather status")
+        print("  /weather help - Show this help")
+    else
+        if SurvivalRP.ShowWeatherStatus then
+            SurvivalRP:ShowWeatherStatus()
+        else
+            SurvivalRP:ShowMessage("Weather system not loaded yet. Try /reload.", "WARNING")
+        end
+    end
+end
+
+-- Temperature commands (bonus command)
+SLASH_TEMP1 = "/temp"
+SLASH_TEMP2 = "/temperature"
+function SlashCmdList.TEMP(msg)
+    local command = string.lower(msg or "")
+    
+    if command == "help" then
+        SurvivalRP:ShowMessage("Temperature Commands:", "SYSTEM")
+        print("  /temp - Show current temperature status")
+        print("  /temp detailed - Show detailed temperature information")
+    elseif command == "detailed" or command == "detail" then
+        if SurvivalRP.playerData.temperature then
+            local temp = SurvivalRP.playerData.temperature
+            local tempStatus, color = SurvivalRP:GetTemperatureStatus()
+            
+            SurvivalRP:ShowMessage(string.format("Temperature: %.1f°F (%s)", temp, tempStatus), "SYSTEM")
+            
+            -- Show clothing and shelter info if available
+            if SurvivalRP.playerData.temperatureData then
+                local tempData = SurvivalRP.playerData.temperatureData
+                SurvivalRP:ShowMessage(string.format("Clothing Warmth: %d | Shelter Bonus: %+d | Heat Sources: %+d", 
+                                                   tempData.clothingWarmth or 0, 
+                                                   tempData.shelterBonus or 0, 
+                                                   tempData.heatSourceBonus or 0), "SYSTEM")
+            end
+            
+            -- Show weather effect if available
+            if SurvivalRP.currentWeatherTempModifier then
+                SurvivalRP:ShowMessage(string.format("Weather Effect: %+.1f°F", SurvivalRP.currentWeatherTempModifier), "SYSTEM")
+            end
+        else
+            SurvivalRP:ShowMessage("Temperature system not initialized.", "WARNING")
+        end
+    else
+        if SurvivalRP.playerData.temperature then
+            local temp = SurvivalRP.playerData.temperature
+            local tempStatus = SurvivalRP:GetTemperatureStatus()
+            SurvivalRP:ShowMessage(string.format("Current Temperature: %.1f°F (%s)", temp, tempStatus), "SYSTEM")
+        else
+            SurvivalRP:ShowMessage("Temperature system not initialized.", "WARNING")
+        end
     end
 end
 

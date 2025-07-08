@@ -2,27 +2,43 @@
 
 -- This function replaces the placeholder in the main file
 function SurvivalRP:UpdateSurvivalStats(deltaTime)
+    -- Initialize systems if needed (with safe checks)
+    if not self.playerData.sleepData and self.InitializeSleepSystem then
+        self:InitializeSleepSystem()
+    end
+    if not self.playerData.temperatureData and self.InitializeTemperatureData then
+        self:InitializeTemperatureData()
+    end
+    
     local decayMultiplier = self:GetDecayMultiplier()
     local minuteDelta = deltaTime / 60
     
-    -- Update hunger
-    if not self.playerData.isResting then
+    -- Update hunger (don't decay while sleeping)
+    if not self.playerData.isResting and not (self.playerData.sleepData and self.playerData.sleepData.isSleeping) then
         self.playerData.hunger = math.max(0, self.playerData.hunger - (self.config.hungerDecayRate * decayMultiplier * minuteDelta))
     end
     
-    -- Update thirst
-    self.playerData.thirst = math.max(0, self.playerData.thirst - (self.config.thirstDecayRate * decayMultiplier * minuteDelta))
+    -- Update thirst (always decays, but slower while sleeping)
+    local thirstMultiplier = (self.playerData.sleepData and self.playerData.sleepData.isSleeping) and 0.3 or 1.0
+    self.playerData.thirst = math.max(0, self.playerData.thirst - (self.config.thirstDecayRate * decayMultiplier * thirstMultiplier * minuteDelta))
     
     -- Update fatigue
     if self.playerData.isResting then
         self.playerData.fatigue = math.min(100, self.playerData.fatigue + (self.config.restoreRate * deltaTime))
+    elseif self.playerData.sleepData and self.playerData.sleepData.isSleeping then
+        -- Fatigue is handled in sleep system with better restore rates
     else
         self.playerData.fatigue = math.max(0, self.playerData.fatigue - (self.config.fatigueDecayRate * decayMultiplier * minuteDelta))
     end
     
-    -- Update temperature
+    -- Update temperature system (with safe check)
     if self.UpdateTemperature then
-        self:UpdateTemperature()
+        self:UpdateTemperature(deltaTime)
+    end
+    
+    -- Update sleep system (with safe check)
+    if self.UpdateSleepSystem then
+        self:UpdateSleepSystem(deltaTime)
     end
 end
 
@@ -44,12 +60,26 @@ function SurvivalRP:GetDecayMultiplier()
     local zoneMultiplier = self:GetZoneMultiplier()
     multiplier = multiplier * zoneMultiplier
     
+    -- Temperature effects
+    if self.temperatureMultiplier then
+        multiplier = multiplier * self.temperatureMultiplier
+    end
+    
+    -- Sleep debt effects
+    if self.sleepDebtMultiplier then
+        multiplier = multiplier * self.sleepDebtMultiplier
+    end
+    
     return multiplier
 end
 
 function SurvivalRP:GetWeatherMultiplier()
-    -- Note: GetWeatherType() might not be available in all WoW versions
-    -- This is a fallback implementation
+    -- Enhanced weather multiplier if weather system is loaded
+    if self.playerData.weatherData and self.GetWeatherMultiplier then
+        return self:GetWeatherMultiplier()
+    end
+    
+    -- Fallback implementation
     return 1.0
 end
 
@@ -73,8 +103,10 @@ end
 function SurvivalRP:HandleConsumption(itemType, restoreAmount)
     if itemType == "food" then
         self.playerData.hunger = math.min(100, self.playerData.hunger + restoreAmount)
+        self:ShowMessage("You feel less hungry.", "SYSTEM")
     elseif itemType == "drink" then
         self.playerData.thirst = math.min(100, self.playerData.thirst + restoreAmount)
+        self:ShowMessage("You feel refreshed.", "SYSTEM")
     end
 end
 
@@ -167,42 +199,33 @@ function SurvivalRP:DeserializeData(serializedData)
     return data
 end
 
--- This displays messages from OTHER players only (received via addon communication)
-function SurvivalRP:DisplayAddonMessage(data)
-    local coloredName = "|cff00ff00" .. data.player .. "|r"
-    local message = "[SurvivalRP] " .. coloredName .. " " .. data.message
-    
-    -- Display in a separate chat frame or default chat
-    if self.config.useSeperateChannel then
-        -- You could create a separate chat tab for SurvivalRP messages
-        print(message)
-    else
-        print(message)
-    end
-end
-
--- This displays the local player's own messages (called once immediately)
 function SurvivalRP:DisplayLocalMessage(data)
-    local coloredName = "|cff00ff00" .. data.player .. "|r"
-    local message = "[SurvivalRP] " .. coloredName .. " " .. data.message
+    if self.config.chatMode == "EMOTE_ONLY" then
+        return -- Don't display text in emote-only mode
+    end
     
-    -- Display in a separate chat frame or default chat
-    if self.config.useSeperateChannel then
-        -- You could create a separate chat tab for SurvivalRP messages
-        print(message)
+    local playerName = UnitName("player")
+    local message = data.player .. " " .. data.message
+    
+    -- Display in appropriate channel
+    if self.config.chatChannel == "SAY" then
+        print("|cffcccccc[RP]|r " .. message)
     else
-        print(message)
+        print("|cff00ff88[SurvivalRP]|r " .. message)
     end
 end
 
-function SurvivalRP:ResetPlayerData()
-    self.playerData = {
-        hunger = 100,
-        thirst = 100,
-        fatigue = 100,
-        temperature = 50,
-        isResting = false,
-        lastUpdate = GetTime(),
-        sleepDebt = 0
-    }
+function SurvivalRP:DisplayAddonMessage(data)
+    if self.config.chatMode == "EMOTE_ONLY" then
+        return -- Don't display text in emote-only mode
+    end
+    
+    local message = data.player .. " " .. data.message
+    
+    -- Display messages from other players
+    if self.config.chatChannel == "SAY" then
+        print("|cffcccccc[RP]|r " .. message)
+    else
+        print("|cff00ff88[SurvivalRP]|r " .. message)
+    end
 end
