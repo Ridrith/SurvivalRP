@@ -101,11 +101,42 @@ function SurvivalRP:GetZoneMultiplier()
 end
 
 function SurvivalRP:HandleConsumption(itemType, restoreAmount)
+    -- Validate inputs
+    if not itemType or (itemType ~= "food" and itemType ~= "drink") then
+        self:ShowMessage("Invalid consumption type: " .. (itemType or "nil"), "WARNING")
+        return
+    end
+    
+    if not restoreAmount or type(restoreAmount) ~= "number" or restoreAmount <= 0 then
+        self:ShowMessage("Invalid restore amount: " .. (restoreAmount or "nil"), "WARNING")
+        restoreAmount = itemType == "food" and 8 or 6 -- Default fallback
+    end
+    
+    -- Ensure player data exists
+    if not self.playerData then
+        self:ShowMessage("Player data not initialized", "WARNING")
+        return
+    end
+    
     if itemType == "food" then
-        self.playerData.hunger = math.min(100, self.playerData.hunger + restoreAmount)
+        local oldHunger = self.playerData.hunger or 0
+        self.playerData.hunger = math.min(100, oldHunger + restoreAmount)
+        local actualRestore = self.playerData.hunger - oldHunger
+        
+        if self.debugMode then
+            self:DebugPrint("Hunger: " .. oldHunger .. " -> " .. self.playerData.hunger .. " (+" .. actualRestore .. ")")
+        end
+        
         self:ShowMessage("You feel less hungry.", "SYSTEM")
     elseif itemType == "drink" then
-        self.playerData.thirst = math.min(100, self.playerData.thirst + restoreAmount)
+        local oldThirst = self.playerData.thirst or 0
+        self.playerData.thirst = math.min(100, oldThirst + restoreAmount)
+        local actualRestore = self.playerData.thirst - oldThirst
+        
+        if self.debugMode then
+            self:DebugPrint("Thirst: " .. oldThirst .. " -> " .. self.playerData.thirst .. " (+" .. actualRestore .. ")")
+        end
+        
         self:ShowMessage("You feel refreshed.", "SYSTEM")
     end
 end

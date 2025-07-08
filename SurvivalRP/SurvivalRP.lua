@@ -127,11 +127,80 @@ function SurvivalRP:UpdateEnvironmentalEffects()
 end
 
 function SurvivalRP:CheckForConsumables()
-    -- This will be implemented in food system
+    -- Call the food system implementation with error handling
+    if self.CheckForConsumables then
+        local success, err = pcall(function()
+            -- Call the actual implementation in FoodSystem.lua
+            return self:CheckForConsumables()
+        end)
+        if not success then
+            self:ShowMessage("Error checking consumables: " .. (err or "Unknown error"), "WARNING")
+        end
+    end
 end
 
 function SurvivalRP:HandleSpellcast(spellId)
-    -- This will be implemented in food system
+    -- Enhanced spell detection with error handling
+    if not spellId then
+        return
+    end
+    
+    local success, err = pcall(function()
+        -- Try the food system implementation first
+        if self.HandleSpellcast then
+            self:HandleSpellcast(spellId)
+            return
+        end
+        
+        -- Fallback implementation with basic spell detection
+        local spellName = GetSpellInfo(spellId)
+        if spellName then
+            local lowerName = string.lower(spellName)
+            
+            -- Enhanced spell name detection
+            local isEating = false
+            local isDrinking = false
+            
+            -- Food patterns
+            if string.find(lowerName, "food") or string.find(lowerName, "eat") or 
+               string.find(lowerName, "bread") or string.find(lowerName, "meat") or
+               string.find(lowerName, "fish") or string.find(lowerName, "meal") then
+                isEating = true
+            end
+            
+            -- Drink patterns
+            if string.find(lowerName, "drink") or string.find(lowerName, "water") or 
+               string.find(lowerName, "juice") or string.find(lowerName, "milk") or
+               string.find(lowerName, "potion") then
+                isDrinking = true
+            end
+            
+            if isEating and self.HandleEating then
+                self:HandleEating()
+            elseif isDrinking and self.HandleDrinking then
+                self:HandleDrinking()
+            end
+        end
+        
+        -- Basic fallback for known spell IDs
+        if spellId == 430 or spellId == 432 or spellId == 1131 or spellId == 1135 then -- Drink spells
+            if self.HandleDrinking then
+                self:HandleDrinking()
+            else
+                self:HandleConsumption("drink", 6)
+            end
+        elseif spellId == 433 or spellId == 1133 or spellId == 1137 then -- Food spells
+            if self.HandleEating then
+                self:HandleEating()
+            else
+                self:HandleConsumption("food", 8)
+            end
+        end
+    end)
+    
+    if not success then
+        self:ShowMessage("Error handling spell cast: " .. (err or "Unknown error"), "WARNING")
+    end
 end
 
 -- Main update loop
@@ -192,6 +261,45 @@ function SurvivalRP:ShowMessage(message, type)
     end
 end
 
+-- Test food system functionality
+function SurvivalRP:TestFoodSystem()
+    self:ShowMessage("Testing food system...", "SYSTEM")
+    
+    -- Test 1: Validate database
+    if self.ValidateFoodDatabase then
+        local isValid = self:ValidateFoodDatabase()
+        self:ShowMessage("Database validation: " .. (isValid and "PASSED" or "FAILED"), isValid and "SYSTEM" or "WARNING")
+    end
+    
+    -- Test 2: Test spell detection
+    local testSpells = {430, 433, 432, 1131, 1133, 5004, 18124, 24005}
+    for _, spellId in ipairs(testSpells) do
+        local spellName = GetSpellInfo(spellId)
+        if spellName then
+            self:ShowMessage("Testing spell: " .. spellName .. " (ID: " .. spellId .. ")", "SYSTEM")
+            self:HandleSpellcast(spellId)
+        end
+    end
+    
+    -- Test 3: Test generic consumption
+    self:ShowMessage("Testing generic food consumption", "SYSTEM")
+    if self.HandleEating then
+        self:HandleEating()
+    end
+    
+    self:ShowMessage("Testing generic drink consumption", "SYSTEM")
+    if self.HandleDrinking then
+        self:HandleDrinking()
+    end
+    
+    -- Test 4: Bag scanning
+    if self.CheckForConsumables then
+        self:CheckForConsumables()
+    end
+    
+    self:ShowMessage("Food system test completed", "SYSTEM")
+end
+
 -- Function to open settings panel (compatible with new and old systems)
 function SurvivalRP:OpenSettingsPanel()
     if Settings and Settings.OpenToCategory then
@@ -240,6 +348,24 @@ function SlashCmdList.SURVIVALRP(msg)
         end
     elseif command == "test" then
         SurvivalRP:TestVisualEffects()
+    elseif command == "debug" then
+        SurvivalRP.debugMode = not SurvivalRP.debugMode
+        SurvivalRP:ShowMessage("Debug mode " .. (SurvivalRP.debugMode and "enabled" or "disabled"), "SYSTEM")
+    elseif command == "testfood" then
+        SurvivalRP:TestFoodSystem()
+    elseif command == "validatefood" then
+        if SurvivalRP.ValidateFoodDatabase then
+            SurvivalRP:ValidateFoodDatabase()
+        else
+            SurvivalRP:ShowMessage("Food validation not available", "WARNING")
+        end
+    elseif command == "scanfood" then
+        if SurvivalRP.CheckForConsumables then
+            SurvivalRP:CheckForConsumables()
+            SurvivalRP:ShowMessage("Bag scan completed", "SYSTEM")
+        else
+            SurvivalRP:ShowMessage("Bag scanning not available", "WARNING")
+        end
     elseif command == "help" then
         SurvivalRP:ShowMessage("Available commands:", "SYSTEM")
         print("  /srp - Show current stats")
@@ -247,6 +373,10 @@ function SlashCmdList.SURVIVALRP(msg)
         print("  /srp config - Open settings panel")
         print("  /srp toggle - Hide/show UI")
         print("  /srp test - Test visual effects")
+        print("  /srp debug - Toggle debug mode")
+        print("  /srp testfood - Test food system")
+        print("  /srp validatefood - Validate food database")
+        print("  /srp scanfood - Scan bags for consumables")
         print("  /rest - Begin resting")
         print("  /rest stop - Stop resting")
         print("  /sleep - Begin sleeping")

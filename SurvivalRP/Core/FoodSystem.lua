@@ -28,7 +28,6 @@ SurvivalRP.foodDatabase = {
     [6887] = {type = "food", restore = 4, name = "Spotted Yellowtail"},
     [787] = {type = "food", restore = 3, name = "Slitherskin Mackerel"},
     [4592] = {type = "food", restore = 5, name = "Longjaw Mud Snapper"},
-    [21552] = {type = "food", restore = 7, name = "Striped Yellowtail"},
     [8957] = {type = "food", restore = 8, name = "Spinefin Halibut"},
     
     -- Better Food (10-15 restore)
@@ -66,7 +65,6 @@ SurvivalRP.foodDatabase = {
     -- Better Drinks (10-15 restore)
     [8766] = {type = "drink", restore = 12, name = "Morning Glory Dew"},
     [8079] = {type = "drink", restore = 10, name = "Conjured Mineral Water"},
-    [22829] = {type = "drink", restore = 13, name = "Super Healing Potion"},
     [28501] = {type = "drink", restore = 14, name = "Ravencrest's Legacy"},
     [29454] = {type = "drink", restore = 11, name = "Silvermoon City Special Reserve"},
     [32453] = {type = "drink", restore = 15, name = "Star's Lament"},
@@ -75,9 +73,7 @@ SurvivalRP.foodDatabase = {
     [35954] = {type = "drink", restore = 14, name = "Sweetened Goat's Milk"},
     
     -- Alcoholic beverages (3-15 restore)
-    [159] = {type = "drink", restore = 3, name = "Mead Basted Caribou", special = "alcohol"},
     [1177] = {type = "drink", restore = 4, name = "Oil of Olaf", special = "alcohol"},
-    [1179] = {type = "drink", restore = 5, name = "Ice Cold Milk", special = "alcohol"},
     [1942] = {type = "drink", restore = 4, name = "Bottle of Moonshine", special = "alcohol"},
     [2593] = {type = "drink", restore = 6, name = "Flask of Port", special = "alcohol"},
     [2594] = {type = "drink", restore = 7, name = "Flagon of Mead", special = "alcohol"},
@@ -98,7 +94,6 @@ SurvivalRP.foodDatabase = {
     
     -- Rare/Special Food (16-25 restore)
     [5349] = {type = "food", restore = 18, name = "Conjured Muffin"},
-    [8075] = {type = "drink", restore = 20, name = "Conjured Water"},
     [19696] = {type = "food", restore = 22, name = "Harvest Bread"},
     [20516] = {type = "food", restore = 20, name = "Bobbing Apple"},
     [21023] = {type = "food", restore = 19, name = "Dirge's Kickin' Chimaerok Chops"},
@@ -144,28 +139,220 @@ SurvivalRP.foodDatabase = {
     [22829] = {type = "drink", restore = 24, name = "Super Healing Potion"}
 }
 
--- This function replaces the placeholder in the main file
-function SurvivalRP:CheckForConsumables()
-    -- This function is called when bag contents change
-    -- We'll track item usage through spell casting instead
+-- Comprehensive spell IDs for eating and drinking across WoW versions
+SurvivalRP.consumableSpells = {
+    -- Classic/Basic eating spells
+    eating = {
+        430, 433, 5004, 5005, 5006, 5007, -- Basic food spells
+        24005, 24869, 25660, 25661, 25693, 25894, -- Conjured food spells
+        433, 1133, 1137, 2639, 18124, 18141, -- More food spells
+        29073, 35270, 35271, 35272, 35273, 35274, -- Burning Crusade food
+        42207, 42308, 42309, 42310, 42311, 42312, -- Wrath food spells
+        61827, 61828, 61829, 61830, 61831, -- Cataclysm food
+        104961, 104962, 104963, 104964, 104965, -- MoP food
+        174461, 174462, 174463, 174464, 174465, -- WoD food
+        201336, 201337, 201338, 201339, 201340, -- Legion food
+        257406, 257407, 257408, 257409, 257410, -- BFA food
+        308433, 308434, 308435, 308436, 308437 -- Shadowlands food
+    },
+    -- Classic/Basic drinking spells
+    drinking = {
+        430, 432, 1131, 1135, 5004, 5005, -- Basic drink spells
+        24355, 25693, 25894, 25895, 26654, -- Conjured water spells
+        432, 1131, 1135, 18233, 18234, 24355, -- More drink spells
+        34291, 34292, 34293, 34294, 34295, -- Burning Crusade drinks
+        43182, 43183, 43706, 46755, 57073, -- Wrath drink spells
+        92799, 92800, 92803, 92805, 105230, -- Cataclysm drinks
+        167152, 167153, 167154, 167155, 167156, -- WoD drinks
+        201430, 201431, 201432, 201433, 201434, -- Legion drinks
+        259409, 259410, 259411, 259412, 259413, -- BFA drinks
+        308434, 308435, 308436, 308437, 308438 -- Shadowlands drinks
+    }
+}
+
+-- Spell names for fallback detection (case-insensitive)
+SurvivalRP.consumableSpellNames = {
+    eating = {
+        "food", "eat", "feast", "meal", "bread", "fish", "meat", "conjured.*food",
+        "refreshment", "muffin", "cookie", "cake", "cheese", "apple", "banana"
+    },
+    drinking = {
+        "drink", "water", "juice", "milk", "wine", "ale", "beer", "conjured.*water",
+        "potion", "elixir", "tea", "coffee", "nectar", "mead"
+    }
+}
+
+-- Debug mode configuration
+SurvivalRP.debugMode = false
+
+-- Current consumption tracking
+SurvivalRP.currentConsumption = {
+    itemId = nil,
+    itemType = nil,
+    startTime = nil,
+    spellId = nil
+}
+
+-- WoW API compatibility functions
+local function GetBagItemInfo(bag, slot)
+    -- Handle different WoW versions
+    if GetContainerItemInfo then
+        return GetContainerItemInfo(bag, slot)
+    elseif C_Container and C_Container.GetContainerItemInfo then
+        local info = C_Container.GetContainerItemInfo(bag, slot)
+        return info and info.stackCount, info.hasNoValue, info.itemLink, info.quality, info.hasLoot, info.hyperlink
+    end
+    return nil
+end
+
+local function GetBagItemLink(bag, slot)
+    if GetContainerItemLink then
+        return GetContainerItemLink(bag, slot)
+    elseif C_Container and C_Container.GetContainerItemLink then
+        return C_Container.GetContainerItemLink(bag, slot)
+    end
+    return nil
+end
+
+local function GetBagNumSlots(bag)
+    if GetContainerNumSlots then
+        return GetContainerNumSlots(bag)
+    elseif C_Container and C_Container.GetContainerNumSlots then
+        return C_Container.GetContainerNumSlots(bag)
+    end
+    return 0
 end
 
 -- This function replaces the placeholder in the main file
+function SurvivalRP:CheckForConsumables()
+    -- Scan bags for consumable items to build current inventory
+    local consumables = {food = {}, drink = {}}
+    
+    for bag = 0, 4 do
+        local slots = GetBagNumSlots(bag)
+        if slots and slots > 0 then
+            for slot = 1, slots do
+                local itemLink = GetBagItemLink(bag, slot)
+                if itemLink then
+                    local itemId = GetItemInfoFromHyperlink(itemLink)
+                    if itemId and self.foodDatabase[itemId] then
+                        local itemData = self.foodDatabase[itemId]
+                        local _, count = GetBagItemInfo(bag, slot)
+                        if itemData.type == "food" then
+                            consumables.food[itemId] = {count = count or 1, data = itemData}
+                        elseif itemData.type == "drink" then
+                            consumables.drink[itemId] = {count = count or 1, data = itemData}
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    -- Store consumables for later reference
+    self.playerConsumables = consumables
+    
+    if self.debugMode then
+        local foodCount = 0
+        local drinkCount = 0
+        for _ in pairs(consumables.food) do foodCount = foodCount + 1 end
+        for _ in pairs(consumables.drink) do drinkCount = drinkCount + 1 end
+        self:DebugPrint("Bag scan found " .. foodCount .. " food types and " .. drinkCount .. " drink types")
+    end
+end
+
+-- Enhanced spell detection function
 function SurvivalRP:HandleSpellcast(spellId)
-    -- Handle eating and drinking spells
-    if spellId == 430 then -- Drink
-        self:HandleDrinking()
-    elseif spellId == 433 then -- Food
-        self:HandleEating()
+    -- Check if this is a known eating spell
+    local isEating = false
+    local isDrinking = false
+    
+    for _, eatSpellId in ipairs(self.consumableSpells.eating) do
+        if spellId == eatSpellId then
+            isEating = true
+            break
+        end
+    end
+    
+    if not isEating then
+        for _, drinkSpellId in ipairs(self.consumableSpells.drinking) do
+            if spellId == drinkSpellId then
+                isDrinking = true
+                break
+            end
+        end
+    end
+    
+    -- Fallback: try spell name detection
+    if not isEating and not isDrinking then
+        local spellName = GetSpellInfo(spellId)
+        if spellName then
+            local lowerName = string.lower(spellName)
+            
+            -- Check eating patterns
+            for _, pattern in ipairs(self.consumableSpellNames.eating) do
+                if string.find(lowerName, pattern) then
+                    isEating = true
+                    break
+                end
+            end
+            
+            -- Check drinking patterns if not eating
+            if not isEating then
+                for _, pattern in ipairs(self.consumableSpellNames.drinking) do
+                    if string.find(lowerName, pattern) then
+                        isDrinking = true
+                        break
+                    end
+                end
+            end
+        end
+    end
+    
+    -- Track consumption start
+    if isEating or isDrinking then
+        self.currentConsumption.spellId = spellId
+        self.currentConsumption.itemType = isEating and "food" or "drink"
+        self.currentConsumption.startTime = GetTime()
+        
+        if self.debugMode then
+            local spellName = GetSpellInfo(spellId) or "Unknown"
+            self:DebugPrint("Detected " .. self.currentConsumption.itemType .. " consumption: " .. spellName .. " (ID: " .. spellId .. ")")
+        end
+        
+        -- Handle the consumption
+        if isEating then
+            self:HandleEating()
+        elseif isDrinking then
+            self:HandleDrinking()
+        end
     end
 end
 
 function SurvivalRP:HandleEating()
     -- Find what food item the player is consuming
     local itemId = self:GetCurrentConsumableItem("food")
+    
+    if self.debugMode then
+        self:DebugPrint("HandleEating called, detected item ID: " .. (itemId or "nil"))
+    end
+    
     if itemId and self.foodDatabase[itemId] then
         local foodData = self.foodDatabase[itemId]
+        
+        -- Validate the food data
+        if not foodData.restore or foodData.restore <= 0 then
+            if self.debugMode then
+                self:DebugPrint("Warning: Invalid restore value for " .. (foodData.name or "Unknown") .. ": " .. (foodData.restore or "nil"))
+            end
+            foodData.restore = 8 -- Default fallback
+        end
+        
         self:HandleConsumption("food", foodData.restore)
+        
+        if self.debugMode then
+            self:DebugPrint("Consumed " .. foodData.name .. " (restored " .. foodData.restore .. " hunger)")
+        end
         
         if self.config.enableEmotes then
             local message = "eats " .. foodData.name .. " and feels nourished."
@@ -179,7 +366,13 @@ function SurvivalRP:HandleEating()
         end
     else
         -- Generic food consumption
-        self:HandleConsumption("food", 8) -- Lowered from 20
+        local defaultRestore = 8
+        self:HandleConsumption("food", defaultRestore)
+        
+        if self.debugMode then
+            self:DebugPrint("Generic food consumption (restored " .. defaultRestore .. " hunger)")
+        end
+        
         if self.config.enableEmotes then
             local message = "eats some food and feels less hungry."
             if self.config.chatMode == "ADDON" then
@@ -191,14 +384,35 @@ function SurvivalRP:HandleEating()
             end
         end
     end
+    
+    -- Clear consumption tracking
+    self:ClearConsumptionTracking()
 end
 
 function SurvivalRP:HandleDrinking()
     -- Find what drink item the player is consuming
     local itemId = self:GetCurrentConsumableItem("drink")
+    
+    if self.debugMode then
+        self:DebugPrint("HandleDrinking called, detected item ID: " .. (itemId or "nil"))
+    end
+    
     if itemId and self.foodDatabase[itemId] then
         local drinkData = self.foodDatabase[itemId]
+        
+        -- Validate the drink data
+        if not drinkData.restore or drinkData.restore <= 0 then
+            if self.debugMode then
+                self:DebugPrint("Warning: Invalid restore value for " .. (drinkData.name or "Unknown") .. ": " .. (drinkData.restore or "nil"))
+            end
+            drinkData.restore = 6 -- Default fallback
+        end
+        
         self:HandleConsumption("drink", drinkData.restore)
+        
+        if self.debugMode then
+            self:DebugPrint("Consumed " .. drinkData.name .. " (restored " .. drinkData.restore .. " thirst)")
+        end
         
         if self.config.enableEmotes then
             local message = "drinks " .. drinkData.name .. " and feels refreshed."
@@ -212,7 +426,13 @@ function SurvivalRP:HandleDrinking()
         end
     else
         -- Generic drink consumption
-        self:HandleConsumption("drink", 6) -- Lowered from 25
+        local defaultRestore = 6
+        self:HandleConsumption("drink", defaultRestore)
+        
+        if self.debugMode then
+            self:DebugPrint("Generic drink consumption (restored " .. defaultRestore .. " thirst)")
+        end
+        
         if self.config.enableEmotes then
             local message = "drinks something and feels less thirsty."
             if self.config.chatMode == "ADDON" then
@@ -224,10 +444,162 @@ function SurvivalRP:HandleDrinking()
             end
         end
     end
+    
+    -- Clear consumption tracking
+    self:ClearConsumptionTracking()
+end
+
+-- Debug logging function
+function SurvivalRP:DebugPrint(message)
+    if self.debugMode then
+        print("|cffffcc00[SurvivalRP Debug]|r " .. message)
+    end
+end
+
+-- Clear consumption tracking
+function SurvivalRP:ClearConsumptionTracking()
+    self.currentConsumption.itemId = nil
+    self.currentConsumption.itemType = nil
+    self.currentConsumption.startTime = nil
+    self.currentConsumption.spellId = nil
+end
+
+-- Validate food database entries
+function SurvivalRP:ValidateFoodDatabase()
+    local issues = {}
+    local duplicates = {}
+    local seenIds = {}
+    
+    for itemId, itemData in pairs(self.foodDatabase) do
+        -- Check for duplicates
+        if seenIds[itemId] then
+            table.insert(duplicates, itemId)
+        else
+            seenIds[itemId] = true
+        end
+        
+        -- Validate data structure
+        if not itemData.type or (itemData.type ~= "food" and itemData.type ~= "drink") then
+            table.insert(issues, "Item " .. itemId .. ": Invalid or missing type")
+        end
+        
+        if not itemData.restore or type(itemData.restore) ~= "number" or itemData.restore <= 0 then
+            table.insert(issues, "Item " .. itemId .. ": Invalid restore value")
+        end
+        
+        if not itemData.name or type(itemData.name) ~= "string" or itemData.name == "" then
+            table.insert(issues, "Item " .. itemId .. ": Invalid or missing name")
+        end
+    end
+    
+    if #duplicates > 0 then
+        self:DebugPrint("Duplicate item IDs found: " .. table.concat(duplicates, ", "))
+    end
+    
+    if #issues > 0 then
+        self:DebugPrint("Database validation issues:")
+        for _, issue in ipairs(issues) do
+            self:DebugPrint("  " .. issue)
+        end
+    else
+        self:DebugPrint("Food database validation passed")
+    end
+    
+    return #issues == 0 and #duplicates == 0
 end
 
 function SurvivalRP:GetCurrentConsumableItem(type)
-    -- This is a simplified version - in a real implementation,
-    -- you'd need to track what item the player is currently using
+    -- Try to determine what item the player is currently consuming
+    
+    -- Method 1: Check cursor item (if player clicked to use an item)
+    local cursorType, cursorId = GetCursorInfo()
+    if cursorType == "item" and cursorId then
+        local itemId = cursorId
+        if self.foodDatabase[itemId] and self.foodDatabase[itemId].type == type then
+            if self.debugMode then
+                self:DebugPrint("Found cursor item: " .. (self.foodDatabase[itemId].name or "Unknown") .. " (ID: " .. itemId .. ")")
+            end
+            return itemId
+        end
+    end
+    
+    -- Method 2: Check recently used items in bags (look for items that decreased in count)
+    if self.playerConsumables then
+        local currentConsumables = type == "food" and self.playerConsumables.food or self.playerConsumables.drink
+        
+        for bag = 0, 4 do
+            local slots = GetBagNumSlots(bag)
+            if slots and slots > 0 then
+                for slot = 1, slots do
+                    local itemLink = GetBagItemLink(bag, slot)
+                    if itemLink then
+                        local itemId = GetItemInfoFromHyperlink(itemLink)
+                        if itemId and self.foodDatabase[itemId] and self.foodDatabase[itemId].type == type then
+                            local _, currentCount = GetBagItemInfo(bag, slot)
+                            local storedCount = currentConsumables[itemId] and currentConsumables[itemId].count or 0
+                            
+                            -- If count decreased, this might be what we're consuming
+                            if currentCount and currentCount < storedCount then
+                                if self.debugMode then
+                                    self:DebugPrint("Detected consumption via count decrease: " .. (self.foodDatabase[itemId].name or "Unknown") .. " (ID: " .. itemId .. ")")
+                                end
+                                return itemId
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    -- Method 3: Use spell context if available
+    if self.currentConsumption.spellId then
+        local spellName = GetSpellInfo(self.currentConsumption.spellId)
+        if spellName then
+            local lowerName = string.lower(spellName)
+            
+            -- Try to match spell name to items in database
+            for itemId, itemData in pairs(self.foodDatabase) do
+                if itemData.type == type then
+                    local lowerItemName = string.lower(itemData.name)
+                    -- Check if spell name contains item name or vice versa
+                    if string.find(lowerName, lowerItemName) or string.find(lowerItemName, lowerName) then
+                        if self.debugMode then
+                            self:DebugPrint("Matched via spell name: " .. itemData.name .. " (ID: " .. itemId .. ")")
+                        end
+                        return itemId
+                    end
+                end
+            end
+        end
+    end
+    
+    -- Method 4: Heuristic based on typical items in bags
+    if self.playerConsumables then
+        local availableItems = type == "food" and self.playerConsumables.food or self.playerConsumables.drink
+        local bestGuess = nil
+        local highestRestore = 0
+        
+        -- Prefer items with moderate restoration values (more likely to be consumed)
+        for itemId, itemInfo in pairs(availableItems) do
+            local restore = itemInfo.data.restore
+            if restore >= 5 and restore <= 15 and restore > highestRestore then
+                highestRestore = restore
+                bestGuess = itemId
+            end
+        end
+        
+        if bestGuess then
+            if self.debugMode then
+                self:DebugPrint("Best guess based on restoration value: " .. (self.foodDatabase[bestGuess].name or "Unknown") .. " (ID: " .. bestGuess .. ")")
+            end
+            return bestGuess
+        end
+    end
+    
+    if self.debugMode then
+        self:DebugPrint("Could not determine specific " .. type .. " item being consumed")
+    end
+    
     return nil
 end
