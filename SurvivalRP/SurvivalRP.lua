@@ -38,7 +38,42 @@ function SurvivalRP:Initialize()
     self:CreateUI()
     self:RegisterEvents()
     self:StartUpdateTimer()
+    
+    -- Initialize food system
+    self:InitializeFoodSystem()
+    
     print("|cff00ff00SurvivalRP|r v" .. self.version .. " loaded successfully!")
+end
+
+-- Initialize food system
+function SurvivalRP:InitializeFoodSystem()
+    -- Initialize consumable tracking
+    if not self.currentConsumption then
+        self.currentConsumption = {
+            itemId = nil,
+            itemType = nil,
+            startTime = nil,
+            spellId = nil
+        }
+    end
+    
+    -- Initialize player consumables cache
+    if not self.playerConsumables then
+        self.playerConsumables = {food = {}, drink = {}}
+    end
+    
+    -- Validate food database on startup
+    if self.ValidateFoodDatabase then
+        local isValid = self:ValidateFoodDatabase()
+        if not isValid and self.debugMode then
+            self:DebugPrint("Food database validation failed during initialization")
+        end
+    end
+    
+    -- Perform initial bag scan
+    if self.CheckForConsumables then
+        self:CheckForConsumables()
+    end
 end
 
 -- Register addon communication
@@ -81,6 +116,8 @@ function SurvivalRP:RegisterEvents()
     frame:RegisterEvent("PLAYER_LOGOUT")
     frame:RegisterEvent("BAG_UPDATE")
     frame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+    frame:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED")
+    frame:RegisterEvent("UNIT_SPELLCAST_FAILED")
     frame:RegisterEvent("PLAYER_REGEN_DISABLED") -- Combat start
     frame:RegisterEvent("PLAYER_REGEN_ENABLED") -- Combat end
     frame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
@@ -105,6 +142,11 @@ function SurvivalRP:OnEvent(event, ...)
         if unit == "player" then
             self:HandleSpellcast(spellId)
         end
+    elseif event == "UNIT_SPELLCAST_INTERRUPTED" or event == "UNIT_SPELLCAST_FAILED" then
+        local unit = ...
+        if unit == "player" then
+            self:HandleSpellcastInterrupted()
+        end
     elseif event == "PLAYER_REGEN_DISABLED" then
         self:OnCombatStart()
     elseif event == "PLAYER_REGEN_ENABLED" then
@@ -126,12 +168,95 @@ function SurvivalRP:UpdateEnvironmentalEffects()
     -- This will be implemented in temperature system
 end
 
+function SurvivalRP:HandleSpellcastInterrupted()
+    -- Handle interrupted eating/drinking
+    if self.currentConsumption and self.currentConsumption.spellId then
+        if self.debugMode then
+            self:DebugPrint("Consumption interrupted for spell ID: " .. (self.currentConsumption.spellId or "nil"))
+        end
+        
+        -- Clear the consumption tracking
+        if self.ClearConsumptionTracking then
+            self:ClearConsumptionTracking()
+        end
+    end
+end
+
 function SurvivalRP:CheckForConsumables()
-    -- This will be implemented in food system
+    -- Call the food system implementation with error handling
+    if self.CheckForConsumables then
+        local success, err = pcall(function()
+            -- Call the actual implementation in FoodSystem.lua
+            return self:CheckForConsumables()
+        end)
+        if not success then
+            self:ShowMessage("Error checking consumables: " .. (err or "Unknown error"), "WARNING")
+        end
+    end
 end
 
 function SurvivalRP:HandleSpellcast(spellId)
-    -- This will be implemented in food system
+    -- Enhanced spell detection with error handling
+    if not spellId then
+        return
+    end
+    
+    local success, err = pcall(function()
+        -- Try the food system implementation first
+        if self.HandleSpellcast then
+            self:HandleSpellcast(spellId)
+            return
+        end
+        
+        -- Fallback implementation with basic spell detection
+        local spellName = GetSpellInfo(spellId)
+        if spellName then
+            local lowerName = string.lower(spellName)
+            
+            -- Enhanced spell name detection
+            local isEating = false
+            local isDrinking = false
+            
+            -- Food patterns
+            if string.find(lowerName, "food") or string.find(lowerName, "eat") or 
+               string.find(lowerName, "bread") or string.find(lowerName, "meat") or
+               string.find(lowerName, "fish") or string.find(lowerName, "meal") then
+                isEating = true
+            end
+            
+            -- Drink patterns
+            if string.find(lowerName, "drink") or string.find(lowerName, "water") or 
+               string.find(lowerName, "juice") or string.find(lowerName, "milk") or
+               string.find(lowerName, "potion") then
+                isDrinking = true
+            end
+            
+            if isEating and self.HandleEating then
+                self:HandleEating()
+            elseif isDrinking and self.HandleDrinking then
+                self:HandleDrinking()
+            end
+        end
+        
+        -- Basic fallback for known spell IDs
+        if spellId == 430 or spellId == 432 or spellId == 1131 or spellId == 1135 then -- Drink spells
+            if self.HandleDrinking then
+                self:HandleDrinking()
+            else
+                self:HandleConsumption("drink", 6)
+            end
+        elseif spellId == 433 or spellId == 1133 or spellId == 1137 then -- Food spells
+            if self.HandleEating then
+                self:HandleEating()
+            else
+                self:HandleConsumption("food", 8)
+            end
+        end
+    end)
+    
+    if not success then
+        self:ShowMessage("Error handling spell cast: " .. (err or "Unknown error"), "WARNING")
+    end
 end
 
 -- Main update loop
@@ -192,6 +317,132 @@ function SurvivalRP:ShowMessage(message, type)
     end
 end
 
+-- Test food system functionality
+function SurvivalRP:TestFoodSystem()
+    self:ShowMessage("Testing food system...", "SYSTEM")
+    
+    -- Test 1: Validate database
+    if self.ValidateFoodDatabase then
+        local isValid = self:ValidateFoodDatabase()
+        self:ShowMessage("Database validation: " .. (isValid and "PASSED" or "FAILED"), isValid and "SYSTEM" or "WARNING")
+    end
+    
+    -- Test 2: Test spell detection
+    local testSpells = {430, 433, 432, 1131, 1133, 5004, 18124, 24005}
+    for _, spellId in ipairs(testSpells) do
+        local spellName = GetSpellInfo(spellId)
+        if spellName then
+            self:ShowMessage("Testing spell: " .. spellName .. " (ID: " .. spellId .. ")", "SYSTEM")
+            self:HandleSpellcast(spellId)
+        end
+    end
+    
+    -- Test 3: Test generic consumption
+    self:ShowMessage("Testing generic food consumption", "SYSTEM")
+    if self.HandleEating then
+        self:HandleEating()
+    end
+    
+    self:ShowMessage("Testing generic drink consumption", "SYSTEM")
+    if self.HandleDrinking then
+        self:HandleDrinking()
+    end
+    
+    -- Test 4: Bag scanning
+    if self.CheckForConsumables then
+        self:CheckForConsumables()
+    end
+    
+    self:ShowMessage("Food system test completed", "SYSTEM")
+end
+
+-- Debug logging function (also available in main file)
+function SurvivalRP:DebugPrint(message)
+    if self.debugMode then
+        print("|cffffcc00[SurvivalRP Debug]|r " .. message)
+    end
+end
+
+-- Show food system status
+function SurvivalRP:ShowFoodSystemStatus()
+    self:ShowMessage("=== Food System Status ===", "SYSTEM")
+    
+    -- Debug mode status
+    self:ShowMessage("Debug Mode: " .. (self.debugMode and "ON" or "OFF"), "SYSTEM")
+    
+    -- Database status
+    if self.foodDatabase then
+        local foodCount = 0
+        local drinkCount = 0
+        for _, item in pairs(self.foodDatabase) do
+            if item.type == "food" then
+                foodCount = foodCount + 1
+            elseif item.type == "drink" then
+                drinkCount = drinkCount + 1
+            end
+        end
+        self:ShowMessage("Database: " .. foodCount .. " foods, " .. drinkCount .. " drinks", "SYSTEM")
+    else
+        self:ShowMessage("Database: NOT LOADED", "WARNING")
+    end
+    
+    -- Spell detection status
+    if self.consumableSpells then
+        local eatSpells = #self.consumableSpells.eating
+        local drinkSpells = #self.consumableSpells.drinking
+        self:ShowMessage("Spell Detection: " .. eatSpells .. " eating, " .. drinkSpells .. " drinking", "SYSTEM")
+    else
+        self:ShowMessage("Spell Detection: NOT LOADED", "WARNING")
+    end
+    
+    -- Current consumption status
+    if self.currentConsumption then
+        local consuming = self.currentConsumption.spellId and "YES" or "NO"
+        self:ShowMessage("Currently Consuming: " .. consuming, "SYSTEM")
+        if self.currentConsumption.spellId then
+            self:ShowMessage("  Type: " .. (self.currentConsumption.itemType or "Unknown"), "SYSTEM")
+            self:ShowMessage("  Spell ID: " .. (self.currentConsumption.spellId or "Unknown"), "SYSTEM")
+        end
+    end
+    
+    -- Bag scan status
+    if self.playerConsumables then
+        local foodTypes = 0
+        local drinkTypes = 0
+        for _ in pairs(self.playerConsumables.food or {}) do foodTypes = foodTypes + 1 end
+        for _ in pairs(self.playerConsumables.drink or {}) do drinkTypes = drinkTypes + 1 end
+        self:ShowMessage("In Bags: " .. foodTypes .. " food types, " .. drinkTypes .. " drink types", "SYSTEM")
+    else
+        self:ShowMessage("Bag Scan: NOT PERFORMED", "WARNING")
+    end
+    
+    -- Function availability
+    local functions = {
+        "HandleSpellcast", "CheckForConsumables", "HandleEating", "HandleDrinking",
+        "GetCurrentConsumableItem", "ValidateFoodDatabase", "DebugPrint"
+    }
+    
+    local available = {}
+    local missing = {}
+    for _, func in ipairs(functions) do
+        if self[func] then
+            table.insert(available, func)
+        else
+            table.insert(missing, func)
+        end
+    end
+    
+    if #available > 0 then
+        self:ShowMessage("Available Functions: " .. table.concat(available, ", "), "SYSTEM")
+    end
+    
+    if #missing > 0 then
+        self:ShowMessage("Missing Functions: " .. table.concat(missing, ", "), "WARNING")
+    end
+    
+    self:ShowMessage("=========================", "SYSTEM")
+end
+
 -- Function to open settings panel (compatible with new and old systems)
 function SurvivalRP:OpenSettingsPanel()
     if Settings and Settings.OpenToCategory then
@@ -240,6 +491,26 @@ function SlashCmdList.SURVIVALRP(msg)
         end
     elseif command == "test" then
         SurvivalRP:TestVisualEffects()
+    elseif command == "debug" then
+        SurvivalRP.debugMode = not SurvivalRP.debugMode
+        SurvivalRP:ShowMessage("Debug mode " .. (SurvivalRP.debugMode and "enabled" or "disabled"), "SYSTEM")
+    elseif command == "testfood" then
+        SurvivalRP:TestFoodSystem()
+    elseif command == "validatefood" then
+        if SurvivalRP.ValidateFoodDatabase then
+            SurvivalRP:ValidateFoodDatabase()
+        else
+            SurvivalRP:ShowMessage("Food validation not available", "WARNING")
+        end
+    elseif command == "scanfood" then
+        if SurvivalRP.CheckForConsumables then
+            SurvivalRP:CheckForConsumables()
+            SurvivalRP:ShowMessage("Bag scan completed", "SYSTEM")
+        else
+            SurvivalRP:ShowMessage("Bag scanning not available", "WARNING")
+        end
+    elseif command == "foodstatus" then
+        SurvivalRP:ShowFoodSystemStatus()
     elseif command == "help" then
         SurvivalRP:ShowMessage("Available commands:", "SYSTEM")
         print("  /srp - Show current stats")
@@ -247,6 +518,11 @@ function SlashCmdList.SURVIVALRP(msg)
         print("  /srp config - Open settings panel")
         print("  /srp toggle - Hide/show UI")
         print("  /srp test - Test visual effects")
+        print("  /srp debug - Toggle debug mode")
+        print("  /srp testfood - Test food system")
+        print("  /srp validatefood - Validate food database")
+        print("  /srp scanfood - Scan bags for consumables")
+        print("  /srp foodstatus - Show food system status")
         print("  /rest - Begin resting")
         print("  /rest stop - Stop resting")
         print("  /sleep - Begin sleeping")
