@@ -28,7 +28,8 @@ SurvivalRP.config = {
     chatMode = "ADDON", -- ADDON, NORMAL, EMOTE_ONLY
     enableWeatherEffects = true,
     enableTemperature = true,
-    useSeperateChannel = false
+    useSeperateChannel = false,
+    enableDebugLogging = false -- Add debug logging option
 }
 
 -- Initialize addon
@@ -37,8 +38,28 @@ function SurvivalRP:Initialize()
     self:RegisterAddonComm()
     self:CreateUI()
     self:RegisterEvents()
+    self:InitializeFoodSystem()
     self:StartUpdateTimer()
     print("|cff00ff00SurvivalRP|r v" .. self.version .. " loaded successfully!")
+end
+
+-- Initialize food system components
+function SurvivalRP:InitializeFoodSystem()
+    -- Initialize tracking variables
+    if not self.bagContents then
+        self.bagContents = {}
+    end
+    if not self.currentConsumption then
+        self.currentConsumption = {
+            lastItemUsed = nil,
+            lastItemType = nil,
+            consumptionTime = 0
+        }
+    end
+    
+    -- Perform initial bag scan
+    self:CheckForConsumables()
+    self:DebugLog("Food system initialized")
 end
 
 -- Register addon communication
@@ -100,6 +121,10 @@ function SurvivalRP:OnEvent(event, ...)
         self:SavePlayerData()
     elseif event == "BAG_UPDATE" then
         self:CheckForConsumables()
+        -- Also track bag changes for consumption detection
+        if self.OnBagContentsChanged then
+            self:OnBagContentsChanged()
+        end
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
         local unit, _, spellId = ...
         if unit == "player" then
@@ -127,11 +152,11 @@ function SurvivalRP:UpdateEnvironmentalEffects()
 end
 
 function SurvivalRP:CheckForConsumables()
-    -- This will be implemented in food system
+    -- Implementation provided by FoodSystem.lua
 end
 
 function SurvivalRP:HandleSpellcast(spellId)
-    -- This will be implemented in food system
+    -- Implementation provided by FoodSystem.lua  
 end
 
 -- Main update loop
@@ -192,6 +217,13 @@ function SurvivalRP:ShowMessage(message, type)
     end
 end
 
+-- Debug logging function
+function SurvivalRP:DebugLog(message)
+    if self.config.enableDebugLogging then
+        print("|cff808080[SurvivalRP Debug]|r " .. message)
+    end
+end
+
 -- Function to open settings panel (compatible with new and old systems)
 function SurvivalRP:OpenSettingsPanel()
     if Settings and Settings.OpenToCategory then
@@ -240,6 +272,25 @@ function SlashCmdList.SURVIVALRP(msg)
         end
     elseif command == "test" then
         SurvivalRP:TestVisualEffects()
+    elseif command == "debug" then
+        SurvivalRP.config.enableDebugLogging = not SurvivalRP.config.enableDebugLogging
+        SurvivalRP:ShowMessage("Debug logging " .. (SurvivalRP.config.enableDebugLogging and "enabled" or "disabled"), "SYSTEM")
+    elseif command == "foodtest" then
+        -- Test food system detection
+        SurvivalRP:ShowMessage("Testing food system...", "SYSTEM")
+        SurvivalRP:CheckForConsumables()
+        local foodCount = 0
+        local drinkCount = 0
+        for itemId, count in pairs(SurvivalRP.bagContents or {}) do
+            if SurvivalRP.foodDatabase[itemId] then
+                if SurvivalRP.foodDatabase[itemId].type == "food" then
+                    foodCount = foodCount + count
+                elseif SurvivalRP.foodDatabase[itemId].type == "drink" then
+                    drinkCount = drinkCount + count
+                end
+            end
+        end
+        SurvivalRP:ShowMessage("Found " .. foodCount .. " food items and " .. drinkCount .. " drink items in bags", "SYSTEM")
     elseif command == "help" then
         SurvivalRP:ShowMessage("Available commands:", "SYSTEM")
         print("  /srp - Show current stats")
@@ -247,6 +298,8 @@ function SlashCmdList.SURVIVALRP(msg)
         print("  /srp config - Open settings panel")
         print("  /srp toggle - Hide/show UI")
         print("  /srp test - Test visual effects")
+        print("  /srp debug - Toggle debug logging")
+        print("  /srp foodtest - Test food system detection")
         print("  /rest - Begin resting")
         print("  /rest stop - Stop resting")
         print("  /sleep - Begin sleeping")
